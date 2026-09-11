@@ -5,11 +5,6 @@
 
 **AI-powered underground mine safety, monitoring and rescue system**
 
-[![SIH 2026](https://img.shields.io/badge/Smart%20India%20Hackathon-2026-0A66C2?style=for-the-badge)](https://www.sih.gov.in/)
-[![Problem Statement](https://img.shields.io/badge/PS-26039-111827?style=for-the-badge)](#problem-statement)
-[![Theme](https://img.shields.io/badge/Theme-Disaster%20Management-D97706?style=for-the-badge)](#problem-statement)
-[![Category](https://img.shields.io/badge/Category-Hardware%20%2B%20Software-16A34A?style=for-the-badge)](#system-overview)
-
 > **“Assess first. Enter safely. Rescue faster.”**
 
 </div>
@@ -17,8 +12,6 @@
 ---
 
 ## 🚨 Problem Statement
-
-**Smart India Hackathon 2026 — Problem Statement 26039**
 
 **AI-Powered Underground Mine Safety, Monitoring and Rescue System**
 
@@ -600,60 +593,6 @@ The original proposal identifies the following technical and research references
 - [ ] Relay / mesh communication
 - [ ] Hardware-in-the-loop testing
 - [ ] Controlled disaster-environment testing
-
----
-
-## 👥 Team
-
-### R.E.A.C.T.
-**Robotic Emergency Assessment & Critical-response Technology**
-
-**Smart India Hackathon 2026**  
-**Problem Statement:** 26039  
-**Theme:** Disaster Management  
-**Category:** Hybrid — Hardware & Software
-
-> *Assess first. Enter safely. Rescue faster.*
-
-### Team members
-
-| Name | Role |
-|---|---|
-| `<Member 1>` | `<Role>` |
-| `<Member 2>` | `<Role>` |
-| `<Member 3>` | `<Role>` |
-| `<Member 4>` | `<Role>` |
-| `<Member 5>` | `<Role>` |
-| `<Member 6>` | `<Role>` |
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome during development.
-
-1. Fork the repository.
-2. Create a feature branch.
-
-```bash
-git checkout -b feature/your-feature
-```
-
-3. Commit your changes.
-
-```bash
-git commit -m "feat: add your feature"
-```
-
-4. Push the branch.
-
-```bash
-git push origin feature/your-feature
-```
-
-5. Open a Pull Request.
-
-For major architectural changes, document the design decision before implementation.
 
 ---
 
