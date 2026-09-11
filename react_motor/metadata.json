@@ -1,0 +1,6 @@
+{
+  "name": "REACT Rover - 2D Mapping & Tracking System",
+  "description": "Real-time 2D occupancy mapping, IMU dead reckoning, ultrasonic sensor fusion, and Ground Control Station for the REACT underground coal-mine exploration rover.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
