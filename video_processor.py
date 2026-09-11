@@ -42,8 +42,9 @@ import visualization as viz
 
 
 class VideoProcessor:
-    def __init__(self, video_path=None):
-        self.video_path = video_path or config.VIDEO_PATH
+    def __init__(self, source=1, source_name="camera"):
+        self.source = source
+        self.source_name = source_name
         self.vo = VisualOdometry()
         self.ultrasonic = SimulatedUltrasonicArray()
         self.detector = ObjectDetector()
@@ -51,7 +52,8 @@ class VideoProcessor:
         self.mine_map = MineMap()
         self.map_canvas = viz.MapCanvas()
 
-        self.mine_map.set_hazard_zones(self.hazards.zone_hazard_records())
+        # No predetermined hazard zones. Hazards enter the map only when
+        # the vision pipeline detects them in the video.
 
         os.makedirs(config.OUTPUT_DIR, exist_ok=True)
         self._trajectory_rows = []
@@ -82,72 +84,103 @@ class VideoProcessor:
         for w in warnings:
             row = dict(w)
             row["frame"] = self.frame_index
-            row.update({k: env[k] for k in ("oxygen", "methane", "co", "co2", "temperature")})
+            row.update({k: env.get(k, "") for k in ("oxygen", "methane", "co", "co2", "temperature")})
             self._hazard_rows.append(row)
 
     # ------------------------------------------------------------------
     def run(self):
-        cap = cv2.VideoCapture(self.video_path)
+        """Run continuously from a live camera until the user presses q."""
+        cap = cv2.VideoCapture(self.source)
         if not cap.isOpened():
-            raise FileNotFoundError(
-                f"Could not open video at '{self.video_path}'. "
-                f"Place your tunnel video there or update config.VIDEO_PATH."
+            raise RuntimeError(
+                f"Could not open camera source '{self.source}'. "
+                f"Try changing config.CAMERA_INDEX (currently {config.CAMERA_INDEX})."
             )
 
-        print(f"[video_processor] Processing: {self.video_path}")
+        # Ask the camera for a sensible capture size. The actual size may
+        # differ depending on the webcam/driver, so we always inspect the
+        # returned frame before processing it.
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
+        cap.set(cv2.CAP_PROP_FPS, config.CAMERA_FPS)
+
+        actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        actual_fps = cap.get(cv2.CAP_PROP_FPS)
+        print(f"[video_processor] Live camera opened: index={self.source}, "
+              f"resolution={actual_w}x{actual_h}, fps={actual_fps:.1f}")
+        print("[video_processor] Running continuously. Press Q in the dashboard window to stop.")
         print(f"[video_processor] METERS_PER_FRAME (simulated scale) = {config.METERS_PER_FRAME}")
 
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    print("[video_processor] Camera frame read failed. Stopping.")
+                    break
 
-            self.frame_index += 1
-            if config.FRAME_STRIDE > 1 and (self.frame_index % config.FRAME_STRIDE != 0):
-                continue
+                self.frame_index += 1
+                if config.FRAME_STRIDE > 1 and (self.frame_index % config.FRAME_STRIDE != 0):
+                    # Still pump the UI so the window remains responsive.
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        break
+                    continue
 
-            # Resize for consistent processing speed / intrinsics assumption.
-            h0, w0 = frame.shape[:2]
-            scale = config.PROCESS_WIDTH / w0
-            frame = cv2.resize(frame, (config.PROCESS_WIDTH, int(h0 * scale)))
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                # Resize for consistent processing speed / intrinsics assumption.
+                h0, w0 = frame.shape[:2]
+                scale = config.PROCESS_WIDTH / w0
+                frame = cv2.resize(frame, (config.PROCESS_WIDTH, int(h0 * scale)))
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # 1) Visual odometry -> rover motion / position (REAL + SIMULATED SCALE)
-            pose, vo_status, matches, kp, good_matches = self.vo.process_frame(gray)
-            self.mine_map.add_trajectory_point(pose)
-            self._log_trajectory(pose, matches, vo_status)
+                # 1) Visual odometry -> rover motion / position
+                pose, vo_status, matches, kp, good_matches = self.vo.process_frame(gray)
+                self.mine_map.add_trajectory_point(pose)
+                self._log_trajectory(pose, matches, vo_status)
 
-            # 2) Simulated ultrasonic sensors (front/left/right)
-            sensors = {"front": 0.0, "left": 0.0, "right": 0.0}
-            if config.SIMULATE_ULTRASONIC:
-                sensors = self.ultrasonic.estimate(gray)
-                self.mine_map.add_boundary_estimate(pose, sensors["left"], sensors["right"])
+                # 2) Camera-only obstacle/wall estimate. This is a visual
+                # heuristic, not a real ultrasonic sensor.
+                sensors = {"front": 0.0, "left": 0.0, "right": 0.0}
+                if config.SIMULATE_ULTRASONIC:
+                    sensors = self.ultrasonic.estimate(gray)
+                    self.mine_map.add_boundary_estimate(pose, sensors["left"], sensors["right"])
 
-            # 3) Object detection (YOLO + fire/smoke placeholder heuristic)
-            detections = []
-            if config.ENABLE_YOLO:
-                detections = self.detector.detect(frame)
-                self._log_detections(detections)
-                for det in detections:
-                    if det.label == "person":
-                        self.mine_map.add_person(pose, det.forward, det.lateral,
-                                                  det.confidence, self.frame_index)
-                    else:
-                        self.mine_map.add_detection(det.label, pose, det.forward, det.lateral,
-                                                     det.confidence, self.frame_index, label=det.label)
+                # 3) Object detection from the LIVE CAMERA FRAME
+                detections = []
+                if config.ENABLE_YOLO:
+                    detections = self.detector.detect(frame)
+                    self._log_detections(detections)
+                    for det in detections:
+                        if det.label == "person":
+                            self.mine_map.add_person(
+                                pose, det.forward, det.lateral,
+                                det.confidence, self.frame_index
+                            )
+                        else:
+                            self.mine_map.add_detection(
+                                det.label, pose, det.forward, det.lateral,
+                                det.confidence, self.frame_index, label=det.label
+                            )
 
-            # 4) Simulated hazard environment for current position
-            env, warnings = ({}, [])
-            if config.SIMULATE_GAS:
-                env, warnings = self.hazards.sample_environment(pose.x, pose.y)
-                self._log_hazards(env, warnings)
-            else:
-                env = dict(config.BASELINE_ENVIRONMENT)
+                # 4) Vision-derived hazard environment. No predetermined
+                # hazard locations or fake gas readings.
+                env, warnings = self.hazards.sample_from_detections(detections)
+                if warnings:
+                    fire_dets = [d for d in detections
+                                 if d.label in ("fire", "fire_placeholder")]
+                    for warning in warnings:
+                        fire = fire_dets[0] if fire_dets else None
+                        self.mine_map.add_detection(
+                            "fire", pose,
+                            fire.forward if fire else 0.0,
+                            fire.lateral if fire else 0.0,
+                            warning["confidence"], self.frame_index,
+                            label="VISUAL FIRE"
+                        )
+                    self._log_hazards(env, warnings)
 
-            counts = self.mine_map.counts()
+                counts = self.mine_map.counts()
 
-            # 5) Render dashboard
-            if config.SHOW_VIDEO or config.SHOW_MAP:
+                # 5) Render live dashboard
                 annotated = viz.draw_detections_on_frame(frame, detections)
                 map_img = self.map_canvas.render(self.mine_map, pose)
                 status_panel = viz.build_status_panel(
@@ -159,19 +192,24 @@ class VideoProcessor:
                     warnings=warnings, vo_status=vo_status,
                 )
                 dashboard = viz.compose_dashboard(annotated, map_img, status_panel)
-                cv2.imshow("REACT Mine Simulation Dashboard", dashboard)
+                cv2.imshow("REACT Live Camera Dashboard", dashboard)
 
                 if config.SAVE_EVERY_N_FRAMES and self.frame_index % config.SAVE_EVERY_N_FRAMES == 0:
-                    cv2.imwrite(os.path.join(config.OUTPUT_DIR, f"frame_{self.frame_index:05d}.png"), dashboard)
+                    cv2.imwrite(
+                        os.path.join(config.OUTPUT_DIR, f"frame_{self.frame_index:05d}.png"),
+                        dashboard
+                    )
 
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q'):
                     print("[video_processor] Quit requested by user.")
                     break
-
-        cap.release()
-        cv2.destroyAllWindows()
-        self._save_outputs()
+        except KeyboardInterrupt:
+            print("[video_processor] Ctrl+C received. Stopping camera processing.")
+        finally:
+            cap.release()
+            cv2.destroyAllWindows()
+            self._save_outputs()
 
     # ------------------------------------------------------------------
     def _save_outputs(self):

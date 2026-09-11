@@ -1,11 +1,13 @@
 """
 main.py
 ========
-Entry point for the REACT Mine Simulation.
+Entry point for the REACT live-camera perception and mapping prototype.
 
 Usage:
     python main.py
-    python main.py path/to/other_video.mp4
+
+The default input is the computer's live camera. Press Q in the dashboard
+window to stop.
 
 This is a SIMULATION / PROTOTYPE of a disaster-response mine rover's
 perception and mapping software. It does not use, and is not a
@@ -15,8 +17,6 @@ for exactly which numbers are estimated from real video vs simulated.
 """
 
 import sys
-import os
-
 import config
 from video_processor import VideoProcessor
 
@@ -36,8 +36,9 @@ DISCLAIMER = """
   - Ultrasonic sensor readings: SIMULATED from image edge-density
     heuristics, not real acoustic time-of-flight hardware.
 
-  - Gas / oxygen / methane / CO / temperature values: SIMULATED from
-    predefined hazard zones (config.HAZARD_ZONES), not real sensors.
+  - Gas / oxygen / methane values are blank because no physical gas
+    sensors are connected. Fire-related CO / CO2 / temperature values are
+    indicative demo estimates populated only after visible fire detection.
 
   - Object distances: estimated from bounding-box height using an
     assumed real-world object height and an assumed focal length
@@ -59,7 +60,7 @@ real-world system (see README.md for more detail on each):
   3. Wheel encoder integration for real odometry scale.
   4. Real ultrasonic or LiDAR hardware for actual obstacle ranging.
   5. Real calibrated gas sensors (O2 / CH4 / CO / CO2) instead of
-     simulated hazard zones.
+     vision-derived demo estimates.
   6. RTAB-Map or ORB-SLAM3 for a full, loop-closing visual SLAM backend.
   7. ROS 2 integration for a real robot middleware/sensor-fusion stack.
   8. Proper camera calibration (intrinsics/distortion) instead of the
@@ -78,14 +79,15 @@ real-world system (see README.md for more detail on each):
 def main():
     print(DISCLAIMER)
 
-    video_path = sys.argv[1] if len(sys.argv) > 1 else config.VIDEO_PATH
-    if not os.path.exists(video_path):
-        print(f"[main] ERROR: video not found at '{video_path}'.")
-        print("[main] Place your tunnel video at that path, or run:")
-        print("       python main.py path/to/your_video.mp4")
-        sys.exit(1)
+    camera_index = config.CAMERA_INDEX
+    if len(sys.argv) > 1:
+        try:
+            camera_index = int(sys.argv[1])
+        except ValueError:
+            print("[main] ERROR: optional camera index must be an integer, e.g. python main.py 1")
+            sys.exit(1)
 
-    processor = VideoProcessor(video_path=video_path)
+    processor = VideoProcessor(source=camera_index, source_name="camera")
     processor.run()
 
     print(SUGGESTED_IMPROVEMENTS)

@@ -29,6 +29,12 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 VIDEO_PATH = os.path.join(BASE_DIR, "input", "tunnel_video.mp4")
+# Live camera is the default input. Change to 1/2/etc. if your USB camera
+# appears at a different OpenCV device index.
+CAMERA_INDEX = 0
+CAMERA_WIDTH = 1280
+CAMERA_HEIGHT = 720
+CAMERA_FPS = 30
 
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 FINAL_MAP_PATH = os.path.join(OUTPUT_DIR, "final_mine_map.png")
@@ -97,31 +103,19 @@ ASSUMED_PERSON_HEIGHT_M = 1.6
 ASSUMED_FOCAL_PX = 700
 
 # ---------------------------------------------------------------------------
-# Simulated Hazards (gas / fire / temperature)
+# Vision-derived environmental hazards
 # ---------------------------------------------------------------------------
-SIMULATE_GAS = True
+# No predetermined hazard locations are used. Environmental values remain
+# blank until a visible hazard is detected in the video.
+SIMULATE_GAS = False
 
-# Ambient/safe baseline environment values.
-BASELINE_ENVIRONMENT = {
-    "oxygen": 20.9,      # %
-    "methane": 0.0,      # %
-    "co": 0,              # ppm
-    "co2": 400,            # ppm
-    "temperature": 22.0,  # C
+# Values shown only when a visual fire detection is active. These are
+# indicative/demo estimates, NOT measurements from a physical sensor.
+FIRE_ENVIRONMENT_ESTIMATE = {
+    "temperature": 65.0,
+    "co": 120.0,
+    "co2": 1800.0,
 }
-
-# Predefined hazard zones in the rover's LOCAL/GLOBAL map coordinate
-# system (meters, same frame as rover_x / rover_y). Radius is meters.
-# type must be one of: "low_oxygen", "methane", "fire", "co"
-HAZARD_ZONES = [
-    {"id": "ZoneB", "type": "low_oxygen", "x": 6.0, "y": 1.0, "radius": 2.0},
-    {"id": "ZoneC", "type": "methane", "x": 12.0, "y": -1.5, "radius": 2.5},
-    {"id": "ZoneD", "type": "fire", "x": 18.0, "y": 0.5, "radius": 1.5},
-]
-
-# Distance (meters) at which the rover is considered to have "entered"
-# a hazard zone and should raise a warning.
-HAZARD_WARNING_RADIUS_MULTIPLIER = 1.3  # warn at 1.3x the zone radius
 
 # ---------------------------------------------------------------------------
 # Display / Runtime

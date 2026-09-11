@@ -138,8 +138,10 @@ class ObjectDetector:
         # Smoke-ish: low saturation, mid-high value (grayish/hazy).
         smoke_mask = cv2.inRange(hsv, (0, 0, 120), (180, 40, 220))
 
-        for mask, label in ((fire_mask, "fire_placeholder"),
-                             (smoke_mask, "smoke_placeholder")):
+        # For this temporary demo, only visible fire is promoted into the
+        # environmental state. Smoke remains visual-only and does not create
+        # a simulated gas reading.
+        for mask, label in ((fire_mask, "fire_placeholder"),):
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
                                             cv2.CHAIN_APPROX_SIMPLE)
             for c in contours:

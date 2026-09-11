@@ -184,17 +184,22 @@ def build_status_panel(width, height, rover_status, sensors, environment,
 
     y = 20
     x0 = 2 * col_w + 12
-    put("ENVIRONMENT (SIMULATED)", x=x0, color=(0, 255, 255), scale=0.55)
-    put(f"O2: {environment['oxygen']:.1f} %   CH4: {environment['methane']:.2f} %", x=x0)
-    put(f"CO: {environment['co']:.1f} ppm  CO2: {environment['co2']:.0f} ppm", x=x0)
-    put(f"Temp: {environment['temperature']:.1f} C", x=x0)
+    put("ENVIRONMENT (VISION)", x=x0, color=(0, 255, 255), scale=0.55)
+    if environment:
+        put("O2: N/A   CH4: N/A", x=x0)
+        put(f"CO: {environment.get('co', 0):.1f} ppm  CO2: {environment.get('co2', 0):.0f} ppm", x=x0)
+        put(f"Temp: {environment.get('temperature', 0):.1f} C [EST.]", x=x0)
+    else:
+        put("O2: --   CH4: --", x=x0)
+        put("CO: --     CO2: --", x=x0)
+        put("Temp: --", x=x0)
 
     y = 20
     x0 = 3 * col_w + 12
     put("DETECTION", x=x0, color=(0, 255, 255), scale=0.55)
     put(f"People: {counts['people']}  Fire: {counts['fire']}", x=x0)
-    put(f"Hazard zones nearby: {len(warnings)}", x=x0)
-    warn_text = ", ".join(f"{w['zone_id']}:{w['level']}" for w in warnings[:2]) or "none"
+    put(f"Visual hazards: {len(warnings)}", x=x0)
+    warn_text = ", ".join(f"{w['type']}:{w['level']}" for w in warnings[:2]) or "none"
     put(f"{warn_text}", x=x0, color=(0, 0, 255) if warnings else COLOR_TEXT, scale=0.45)
 
     return panel

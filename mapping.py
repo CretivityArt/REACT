@@ -84,6 +84,19 @@ class MineMap:
     def add_detection(self, obj_type: str, pose: Pose, forward: float, lateral: float,
                        confidence: float, frame_index: int, label: str = ""):
         gx, gy = local_to_global(pose, forward, lateral)
+
+        # Keep repeatedly observed visual hazards as one map object when
+        # their estimated positions are close. This is deliberately simple
+        # for the demo, but prevents one fire from becoming hundreds of
+        # markers as the video advances frame-by-frame.
+        if obj_type in ("fire", "fire_placeholder"):
+            for obj in self.map_objects:
+                if obj.obj_type in ("fire", "fire_placeholder") and math.hypot(obj.x - gx, obj.y - gy) < 2.5:
+                    obj.x, obj.y = gx, gy
+                    obj.confidence = max(obj.confidence, confidence)
+                    obj.frame_index = frame_index
+                    return obj
+
         obj = MapObject(obj_type, gx, gy, label=label,
                          confidence=confidence, frame_index=frame_index)
         self.map_objects.append(obj)
