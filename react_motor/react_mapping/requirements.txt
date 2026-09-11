@@ -1,0 +1,6 @@
+# REACT Rover - 2D Mapping & Tracking System
+# Python Dependencies
+
+pyserial>=3.5
+numpy>=1.24.0
+matplotlib>=3.7.0
