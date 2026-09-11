@@ -404,56 +404,6 @@ The robot is a reconnaissance and decision-support system, not a replacement for
 
 ---
 
-## 🏗️ Repository Structure
-
-```text
-REACT/
-├── backend/
-│   ├── api/
-│   ├── services/
-│   ├── risk_engine/
-│   └── requirements.txt
-│
-├── dashboard/
-│   ├── src/
-│   ├── public/
-│   └── package.json
-│
-├── rover/
-│   ├── firmware/
-│   ├── sensors/
-│   ├── navigation/
-│   └── communication/
-│
-├── uav/
-│   ├── flight/
-│   ├── telemetry/
-│   └── vision/
-│
-├── ai/
-│   ├── models/
-│   ├── datasets/
-│   ├── inference/
-│   └── training/
-│
-├── mapping/
-│   ├── localization/
-│   ├── mapping/
-│   └── visualization/
-│
-├── docs/
-│   ├── architecture/
-│   ├── hardware/
-│   └── research/
-│
-├── tests/
-├── .gitignore
-├── LICENSE
-└── README.md
-```
-
----
-
 ## 🚀 Getting Started
 
 > The exact installation commands depend on the final implementation. The following is the intended software layout.
