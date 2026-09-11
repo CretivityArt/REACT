@@ -1,613 +1,180 @@
-<div align="center">
+# REACT Mine Simulation
 
-# R.E.A.C.T.
-### Robotic Emergency Assessment & Critical-response Technology
+A **software-only prototype/simulation** of the mapping and hazard-localization
+system for REACT (Reactive Hazard Exploration and Assessment Technology), a
+disaster-response mine rover concept.
 
-**AI-powered underground mine safety, monitoring and rescue system**
-
-> **“Assess first. Enter safely. Rescue faster.”**
-
-</div>
-
----
-
-## 🚨 Problem Statement
-
-**AI-Powered Underground Mine Safety, Monitoring and Rescue System**
-
-Underground mines, tunnels and similar confined environments can become rapidly hazardous during fires, collapses, gas leaks and other emergencies. Sending human responders into an unknown environment before understanding the situation exposes rescuers to unnecessary risk.
-
-R.E.A.C.T. is designed around a simple principle:
-
-> **Send machines into danger first, build situational awareness, then help rescuers make better decisions.**
-
-The proposed system combines a **ground rover**, a deployable **micro-UAV**, onboard sensing, computer vision, risk assessment and a live command dashboard.
+> **This is a simulation/proof-of-concept, not a certified mine-safety
+> instrument.** It processes an ordinary video (no LiDAR, GPS, ultrasonic,
+> or gas-sensor hardware required) and *simulates* those sensors in
+> software using reasonable, clearly-labeled assumptions. See
+> "Honesty / Limitations" below before relying on any number it prints.
 
 ---
 
-## 🤖 What is R.E.A.C.T.?
+## 1. What it does
 
-R.E.A.C.T. is a **semi-autonomous robotic reconnaissance and rescue-assistance platform** for hazardous environments.
+Feed it a video of a tunnel/mine environment (the rover's front camera
+feed) and it will, frame by frame:
 
-The system is designed to:
+1. Estimate the rover's motion and position using **monocular visual
+   odometry** (ORB features + Essential Matrix).
+2. Simulate **ultrasonic front/left/right distance readings** from image
+   edge geometry.
+3. Run **YOLO object detection** (person, vehicle, etc.) plus a clearly
+   labeled **placeholder fire/smoke heuristic** (color-based, since
+   standard YOLO has no fire/smoke classes).
+4. Transform every detection into the rover's global map coordinate
+   frame.
+5. Simulate an **environmental hazard field** (O2, CH4, CO, CO2,
+   temperature) based on predefined hazard zones.
+6. Render a **live dashboard**: annotated video (left) + growing 2D
+   top-down map (right) + a sensor/status text panel (bottom).
+7. Save a final map image and CSV logs when the video ends.
 
-- 🔎 Detect and count trapped persons using computer vision
-- 🧪 Monitor environmental hazards using onboard sensors
-- ❤️ Capture preliminary close-range victim vital information
-- 🗺️ Build a live operational/situation map
-- ⚠️ Calculate and communicate risk levels
-- 🚁 Deploy a micro-drone when the rover cannot safely reach an area
-- 📡 Stream sensor and video information to a remote command center
-- 👨‍🚒 Help rescue teams prioritize victims and safer routes
+---
 
-### Target environments
+## 2. Project structure
 
-| Environment | Example hazards |
+```
+REACT_Mine_Simulation/
+├── main.py                  # entry point
+├── config.py                # all tunable parameters
+├── video_processor.py       # per-frame pipeline orchestration
+├── visual_odometry.py       # ORB + Essential Matrix monocular VO
+├── object_detection.py      # YOLO wrapper + fire/smoke placeholder
+├── simulated_sensors.py     # simulated ultrasonic array
+├── hazard_simulation.py     # simulated gas/fire/temperature hazards
+├── mapping.py                # live 2D map data structure
+├── coordinate_transform.py  # local<->global frame math
+├── visualization.py          # dashboard rendering (OpenCV + Matplotlib)
+├── models/                   # put yolov8n.pt / your custom model here
+├── input/                    # put tunnel_video.mp4 here
+└── output/                   # final_mine_map.png + CSV logs land here
+```
+
+Every file has a docstring explaining exactly what's real (derived from
+video pixels) vs. simulated (an assumed constant or heuristic).
+
+---
+
+## 3. Installation (Windows)
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+pip install opencv-python numpy matplotlib pandas ultralytics
+```
+
+(If you don't need real YOLO detection, you can skip `ultralytics` --
+the program will fall back to the fire/smoke placeholder heuristic only
+and print a warning.)
+
+The first time you run the program with `ENABLE_YOLO = True` and no
+model file present, **Ultralytics will auto-download `yolov8n.pt`** to
+its cache and/or the working directory. To pin a specific model instead:
+
+1. Download a YOLOv8 weights file (e.g. `yolov8n.pt`) from
+   https://github.com/ultralytics/assets/releases
+2. Place it at `models/yolov8n.pt` (matches `config.YOLO_MODEL_PATH`).
+
+To use your **own mine-specific model** (trained with real fire/smoke/
+obstacle/person classes), place its weights at `models/mine_custom.pt`
+(matches `config.CUSTOM_MODEL_PATH`) -- it is picked up automatically
+and the color-based fire/smoke placeholder is disabled since your
+trained model presumably already covers those classes.
+
+---
+
+## 4. Running it
+
+Put your tunnel video at `input/tunnel_video.mp4`, then:
+
+```bash
+python main.py
+```
+
+or point it at a different file:
+
+```bash
+python main.py path\to\other_video.mp4
+```
+
+A window titled **"REACT Mine Simulation Dashboard"** opens showing the
+video (left, with detection boxes), the growing 2D map (right), and the
+sensor panel (bottom). Press **`q`** in that window to stop early.
+
+When the video ends (or you press `q`), the program writes to `output/`:
+
+- `final_mine_map.png` -- a clean Matplotlib rendering of the whole map
+- `trajectory.csv` -- rover pose per frame
+- `detections.csv` -- every object detection per frame
+- `hazards.csv` -- hazard-zone warnings/readings per frame
+
+---
+
+## 5. Configuration (`config.py`)
+
+Key knobs:
+
+| Setting | What it controls |
 |---|---|
-| ⛏️ Mining | Collapse, toxic gases, darkness |
-| 🚇 Tunnels / Metro | Smoke, structural damage, blocked routes |
-| 🏭 Industrial | Fire, chemical exposure, machinery hazards |
-| 🚰 Sewers | Toxic gases, flooding, confined spaces |
-| 🏚️ Structural collapse | Debris, unstable structures, trapped victims |
-| 🌊 Flooded areas | Water ingress, inaccessible routes |
-
-The architecture is intentionally **multi-environment** rather than being limited to mining alone.
-
----
-
-## 🧠 System Overview
-
-```mermaid
-flowchart LR
-    A[🚙 Ground Rover] --> C[🧠 Edge Processing]
-    B[🚁 Micro-UAV] --> C
-
-    A --> S[📡 Sensors]
-    B --> V[📷 Aerial Video]
-
-    S --> C
-    V --> C
-
-    C --> CV[👁️ Computer Vision]
-    C --> RF[⚠️ Risk Engine]
-    C --> MAP[🗺️ Local Mapping]
-
-    CV --> D[🖥️ Command Dashboard]
-    RF --> D
-    MAP --> D
-
-    D --> R[👨‍🚒 Rescue Team]
-```
-
-### End-to-end flow
-
-1. 🚙 **Rover enters** the hazardous area.
-2. 📷 Cameras and sensors continuously collect information.
-3. 👁️ **Computer vision** identifies and counts potential victims.
-4. 🧪 Environmental sensors identify hazards such as dangerous gases or abnormal thermal conditions.
-5. 🧠 Edge processing reduces dependence on continuous external connectivity.
-6. ⚠️ The **risk engine** fuses victim, hazard and environmental information.
-7. 🗺️ A live operational map is constructed from available spatial data.
-8. 🚁 If the rover is blocked or unable to reach an area, the **micro-UAV can be deployed**.
-9. 📡 Data is transmitted to the command center.
-10. 👨‍🚒 Rescue commanders use the dashboard to prioritize victims and plan safer intervention.
+| `VIDEO_PATH` | default input video |
+| `METERS_PER_FRAME` | **simulated** forward-motion scale per frame (see limitations) |
+| `MIN_MATCH_COUNT` | how many ORB matches are required to trust a motion estimate |
+| `ENABLE_YOLO` / `CUSTOM_MODEL_PATH` | turn detection on/off, use your own model |
+| `SIMULATE_ULTRASONIC` / `SIMULATE_GAS` | toggle each simulated sensor subsystem |
+| `HAZARD_ZONES` | list of simulated hazard zones (position, radius, type) |
+| `SHOW_VIDEO` / `SHOW_MAP` | toggle the live dashboard window |
+| `FRAME_STRIDE` | process every Nth frame, for speed on long videos |
 
 ---
 
-## ⭐ Core Innovation
-
-### 1. Dual ground + air reconnaissance
-
-Instead of relying on a single robotic platform, R.E.A.C.T. combines:
-
-- 🚙 **Ground rover** — persistent ground-level sensing and navigation
-- 🚁 **Micro-UAV** — access to areas that are blocked or difficult for the rover to reach
-
-This gives the system a broader operational envelope than a single-platform rescue robot.
-
-### 2. Unified victim + hazard assessment
-
-The system is designed to combine:
-
-**Victim detection + hazard detection + environmental data + risk scoring**
-
-rather than treating each data source as an isolated subsystem.
-
-### 3. Risk-based prioritization
-
-Victims and locations can be assigned a simple operational risk state:
-
-| Level | Meaning |
-|---|---|
-| 🟢 **Stable** | No immediate critical indication |
-| 🟡 **Needs Attention** | Conditions require monitoring/intervention |
-| 🔴 **Critical** | High-priority situation requiring urgent response |
-
-> The risk engine is intended to **support rescue decision-making**, not replace trained rescue personnel.
-
----
-
-## 🛠️ Technical Architecture
-
-### Ground Unit
-
-Potential hardware/software components:
-
-- Camera
-- Environmental sensors
-- Gas sensors
-- Thermal sensing
-- LiDAR / depth sensing
-- Embedded processing unit
-- Rover chassis and drive system
-- Communication module
-
-### Air Unit
-
-Potential components:
-
-- Micro-UAV
-- Camera
-- GPS where available
-- Video telemetry
-- Flight controller
-- Wireless communication
-
-### Edge AI
-
-Computer vision can be used for:
-
-- Person detection
-- Person counting
-- Tracking
-- Scene analysis
-- Potential hazard recognition
-
-The proposal identifies **YOLO / OpenCV** as the primary computer-vision stack.
-
-### Risk Engine
-
-The risk engine fuses:
-
-```text
-Victim observations
-        +
-Environmental hazards
-        +
-Sensor readings
-        +
-Location / map information
-        ↓
-   Risk assessment
-        ↓
-Stable / Attention / Critical
-```
-
-### Command Center
-
-The dashboard is intended to provide:
-
-- 📹 Live video
-- 📊 Sensor telemetry
-- 🚨 Alerts
-- 👥 Victim locations/counts
-- 🗺️ Situation map
-- ⚠️ Risk levels
-- 🟢 Potentially safer zones
-- 🚙 Rover/UAV operational status
-
----
-
-## 🧰 Technology Stack
-
-| Layer | Technologies |
-|---|---|
-| 👁️ Computer Vision | [YOLO](https://docs.ultralytics.com/), [OpenCV](https://opencv.org/) |
-| 🧠 AI / ML | [PyTorch](https://pytorch.org/) |
-| 🔌 Embedded | [ESP32](https://www.espressif.com/en/products/socs/esp32), Arduino |
-| 🚁 UAV Flight Control | [ArduPilot](https://ardupilot.org/), PX4 |
-| 📡 Vehicle Telemetry | [MAVLink](https://mavlink.io/) |
-| 📬 IoT Messaging | [MQTT](https://mqtt.org/) |
-| 🗺️ Mapping | [Leaflet](https://leafletjs.com/) |
-| 🌐 3D Visualization | [Three.js](https://threejs.org/) |
-| ☁️ 3D Data | [Open3D](https://www.open3d.org/) |
-| 🔧 Backend API | [Flask](https://flask.palletsprojects.com/) / [FastAPI](https://fastapi.tiangolo.com/) |
-
-> **Implementation note:** The exact hardware models, communication hardware and final framework choices may change during prototyping. This README describes the proposed architecture rather than claiming that every listed component is already implemented.
-
----
-
-## 📡 Communication Architecture
-
-```mermaid
-flowchart TB
-    R[🚙 Rover] -->|Telemetry / Sensor Data| M[📬 MQTT / Communication Layer]
-    U[🚁 Micro-UAV] -->|Telemetry / Video| M
-
-    M --> E[🧠 Edge / Gateway]
-    E --> API[⚙️ Backend API]
-
-    API --> DB[(🗄️ Mission Data)]
-    API --> DASH[🖥️ Command Dashboard]
-
-    DASH --> CMD[👨‍🚒 Rescue Command]
-```
-
-For underground environments, communication loss is a major design constraint. The proposal therefore considers **relay/mesh nodes** for extending communication coverage.
-
----
-
-## 🗺️ Mission Situation Map
-
-The command dashboard can represent:
-
-- 📍 Rover position
-- 📍 UAV position
-- 👤 Detected victims
-- ⚠️ Hazard locations
-- 🟢 Safer zones
-- 🔴 Critical zones
-- 🧭 Explored/unexplored areas
-- 🛣️ Potential navigation routes
-
-A map-based interface makes raw sensor data more useful to human operators because it converts individual observations into an operational picture.
-
----
-
-## 🔬 Sensor Fusion
-
-A major design goal is to avoid making important decisions from a single sensor.
-
-For example:
-
-```text
-Camera
-  │
-  ├──► Person detected
-  │
-Thermal Sensor
-  │
-  ├──► Heat signature detected
-  │
-Gas Sensor
-  │
-  ├──► Hazard concentration elevated
-  │
-LiDAR / Depth
-  │
-  └──► Environment / obstacle information
-             │
-             ▼
-       Sensor Fusion
-             │
-             ▼
-        Risk Engine
-             │
-             ▼
-       Operator Alert
-```
-
-Sensor fusion can also help reduce false positives, although real-world validation will be required before operational deployment.
-
----
-
-## 🧪 Feasibility
-
-The proposed system uses established technologies:
-
-- Rovers
-- UAVs
-- Cameras
-- Environmental sensors
-- Computer vision
-- Embedded computing
-- Wireless telemetry
-- Web dashboards
-
-The system is intentionally **semi-autonomous**, rather than fully autonomous. This keeps the prototype more realistic for a hackathon while retaining meaningful autonomy.
-
-### Modular development strategy
-
-The project can be developed in layers:
-
-```text
-Phase 1
-├── Rover movement
-├── Camera streaming
-└── Basic telemetry
-
-Phase 2
-├── Person detection
-├── Hazard sensing
-└── Dashboard
-
-Phase 3
-├── Risk engine
-├── Mapping
-└── Alert prioritization
-
-Phase 4
-├── Micro-UAV integration
-├── Relay / mesh communication
-└── Advanced sensor fusion
-```
-
----
-
-## ⚠️ Challenges & Mitigation
-
-| Challenge | Proposed mitigation |
-|---|---|
-| 🌫️ Poor visibility | Multi-modal sensing and robust vision models |
-| 👤 Person detection errors | Model validation + sensor fusion |
-| ❤️ Long-range vital-sign measurement | Restrict vitals assessment to close/contact range and label it as **preliminary assessment** |
-| 📡 Underground connectivity loss | Relay / mesh communication nodes |
-| 🪨 Uneven debris | Rugged modular rover chassis |
-| 🔋 Battery endurance | Power budgeting and modular payloads |
-| 🧪 Sensor false alarms | Calibration + multi-sensor fusion |
-| 🚁 UAV accessibility | Deploy UAV specifically where the rover cannot reach |
-
----
-
-## ❤️ Victim Vital Assessment
-
-R.E.A.C.T. may incorporate close-range sensing for preliminary victim assessment.
-
-**Important limitation:**
-
-> The system is **not intended to provide medical diagnosis**.
-
-Long-range vital-sign measurement can be unreliable in real-world rescue conditions. Therefore, vital sensing should be treated as a **preliminary assessment capability** and validated carefully before any operational use.
-
----
-
-## 🛡️ Safety Philosophy
-
-R.E.A.C.T. follows a simple hierarchy:
-
-```text
-1. Protect human responders
-          ↓
-2. Assess the environment
-          ↓
-3. Locate and prioritize victims
-          ↓
-4. Provide actionable information
-          ↓
-5. Support rescue operations
-```
-
-The robot is a reconnaissance and decision-support system, not a replacement for trained emergency personnel.
-
----
-
-## 📊 Expected Impact
-
-### Social
-
-- ❤️ Faster identification of trapped victims
-- 🧑‍🚒 Reduced exposure of rescue personnel to unknown hazards
-- 🚨 Better prioritization during emergencies
-
-### Economic
-
-- Reduced manpower risk during initial search
-- Reusable architecture across multiple disaster environments
-- Potentially lower cost than deploying large numbers of personnel for initial reconnaissance
-
-### Operational / Environmental
-
-- 🌍 Multi-environment deployment potential
-- 🗺️ Real-time operational picture
-- ⚠️ Better awareness of hazards and accessible zones
-- 🔧 Modular field-repair approach
-
----
-
-## 🏗️ Repository Structure
-
-```text
-REACT/
-├── backend/
-│   ├── api/
-│   ├── services/
-│   ├── risk_engine/
-│   └── requirements.txt
-│
-├── dashboard/
-│   ├── src/
-│   ├── public/
-│   └── package.json
-│
-├── rover/
-│   ├── firmware/
-│   ├── sensors/
-│   ├── navigation/
-│   └── communication/
-│
-├── uav/
-│   ├── flight/
-│   ├── telemetry/
-│   └── vision/
-│
-├── ai/
-│   ├── models/
-│   ├── datasets/
-│   ├── inference/
-│   └── training/
-│
-├── mapping/
-│   ├── localization/
-│   ├── mapping/
-│   └── visualization/
-│
-├── docs/
-│   ├── architecture/
-│   ├── hardware/
-│   └── research/
-│
-├── tests/
-├── .gitignore
-├── LICENSE
-└── README.md
-```
-
----
-
-## 🚀 Getting Started
-
-> The exact installation commands depend on the final implementation. The following is the intended software layout.
-
-### Prerequisites
-
-- Python 3.x
-- Git
-- Node.js / npm
-- Compatible embedded development environment
-- Camera / sensor hardware for hardware-in-the-loop testing
-
-### Clone the repository
-
-```bash
-git clone https://github.com/<YOUR-USERNAME>/<YOUR-REPOSITORY>.git
-cd <YOUR-REPOSITORY>
-```
-
-### Backend
-
-```bash
-cd backend
-
-python -m venv .venv
-```
-
-Windows:
-
-```bash
-.venv\Scripts\activate
-```
-
-Linux/macOS:
-
-```bash
-source .venv/bin/activate
-```
-
-Install dependencies once `requirements.txt` is finalized:
-
-```bash
-pip install -r requirements.txt
-```
-
-### Dashboard
-
-```bash
-cd dashboard
-npm install
-npm run dev
-```
-
-### AI / Computer Vision
-
-For an Ultralytics-based prototype:
-
-```bash
-pip install ultralytics opencv-python
-```
-
-Then integrate the selected trained model into the inference pipeline.
-
----
-
-## 🧪 Testing Strategy
-
-Testing should progress from simulation to controlled physical environments before any real rescue application.
-
-### Software tests
-
-- Unit tests for sensor processing
-- API tests
-- Risk-engine tests
-- Computer-vision benchmark tests
-- Communication failure tests
-
-### Hardware tests
-
-- Rover obstacle testing
-- Sensor calibration
-- Camera performance under reduced visibility
-- Battery/endurance testing
-- Communication-range testing
-- UAV deployment testing
-
-### System tests
-
-- Simulated victim detection
-- Simulated hazard events
-- Connectivity-loss scenarios
-- Rover blockage → UAV deployment
-- Multiple-victim prioritization
-
----
-
-## 📚 Research & References
-
-The original proposal identifies the following technical and research references:
-
-- [Real-Time Human Detection in Search and Rescue Missions Using YOLOv8](https://www.ijraset.com/research-paper/real-time-human-detection-in-search-and-rescue-missions-using-yolov8)
-- [Research article — PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC8588524/)
-- [LAPSE research document](https://psecommunity.org/wp-content/plugins/wpor/includes/file/2304/LAPSE-2023.33160-1v1.pdf)
-- [Kaggle discussion / reference](https://www.kaggle.com/discussions/getting-started/300882)
-
-### Official technology documentation
-
-- [Ultralytics YOLO](https://docs.ultralytics.com/)
-- [OpenCV](https://opencv.org/)
-- [PyTorch](https://pytorch.org/)
-- [Espressif ESP32](https://www.espressif.com/en/products/socs/esp32)
-- [ArduPilot](https://ardupilot.org/)
-- [MAVLink](https://mavlink.io/)
-- [MQTT](https://mqtt.org/)
-- [Leaflet](https://leafletjs.com/)
-- [Three.js](https://threejs.org/)
-- [Open3D](https://www.open3d.org/)
-- [Flask](https://flask.palletsprojects.com/)
-- [FastAPI](https://fastapi.tiangolo.com/)
-
----
-
-## 🧭 Roadmap
-
-- [ ] Rover prototype
-- [ ] Basic sensor integration
-- [ ] Live camera streaming
-- [ ] Person detection
-- [ ] Hazard detection
-- [ ] Sensor fusion
-- [ ] Risk engine
-- [ ] Live dashboard
-- [ ] Local mapping
-- [ ] MQTT telemetry
-- [ ] Micro-UAV integration
-- [ ] UAV deployment mechanism
-- [ ] Relay / mesh communication
-- [ ] Hardware-in-the-loop testing
-- [ ] Controlled disaster-environment testing
-
----
-
-## 📄 License
-
-This project is currently under development.
-
-Add the project's final open-source license here once the team has agreed on the licensing model.
-
----
-
-<div align="center">
-
-### R.E.A.C.T.
-
-**Machines go first. Humans make the decisions.**
-
-</div>
+## 6. Honesty / Limitations (please read)
+
+This system explicitly **does not** have access to:
+
+- Real GPS or metric ground-truth position
+- Real gas/oxygen sensor readings
+- Real acoustic ultrasonic/LiDAR ranging
+- Calibrated camera intrinsics or true depth
+
+Specifically:
+
+- **Monocular scale ambiguity**: a single camera cannot recover true
+  metric distance from feature-matching alone. `visual_odometry.py`
+  recovers *direction* of motion honestly (from the Essential Matrix)
+  but scales every step by the configurable `METERS_PER_FRAME`
+  constant, not a measured quantity. Positions will drift from reality
+  over a long video, and there's no loop closure to correct it.
+- **Simulated ultrasonic** (`simulated_sensors.py`) uses image
+  edge-density as a rough, unvalidated proxy for "closeness" -- it is
+  not a physical distance sensor.
+- **Simulated gas/hazard field** (`hazard_simulation.py`) is entirely
+  generated from a predefined list of hazard zones you configure; it
+  does not sense anything in the video.
+- **Object distance estimates** (`object_detection.py`) use the classic
+  monocular trick `distance ≈ real_height × focal_px / bbox_height_px`,
+  which depends on assumed object height and an assumed (uncalibrated)
+  focal length -- treat these as rough estimates only.
+- **Fire/smoke detection** without a custom-trained model is a crude
+  HSV color-threshold heuristic, clearly labeled `fire_placeholder` /
+  `smoke_placeholder` in all outputs, and will have false
+  positives/negatives. Train and supply a real model at
+  `models/mine_custom.pt` for anything beyond a demo.
+
+## 7. Suggested next steps toward a more accurate real system
+
+1. Stereo or RGB-D camera for real calibrated depth
+2. Real IMU integration
+3. Wheel encoder integration for real odometry scale
+4. Real ultrasonic/LiDAR hardware
+5. Real calibrated gas sensors
+6. RTAB-Map or ORB-SLAM3 for full visual SLAM with loop closure
+7. ROS 2 integration for sensor fusion / robot middleware
+8. Proper camera calibration (intrinsics/distortion)
+9. Learned monocular/stereo depth estimation
+10. A mine-specific YOLO model trained on real fire/smoke data
+11. EKF/UKF sensor fusion (VO + IMU + encoders)
+12. Loop closure detection to correct drift
+13. True probabilistic occupancy-grid mapping
