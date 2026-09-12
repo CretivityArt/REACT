@@ -1,3 +1,6 @@
-./venv
-__pycache__
+.venv/
+__pycache__/
 all.zip
+react_motor.zip
+output/
+compass.cpp
