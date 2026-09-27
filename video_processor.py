@@ -222,7 +222,7 @@ class VideoProcessor:
                          ["frame", "label", "confidence", "distance_m", "direction", "placeholder"])
         self._write_csv(config.HAZARDS_CSV, self._hazard_rows,
                          ["frame", "zone_id", "type", "level", "distance_to_center",
-                          "oxygen", "methane", "co", "co2", "temperature"])
+                          "oxygen", "methane", "co", "co2", "temperature", "source", "confidence"])
 
         print(f"[video_processor] Saved trajectory -> {config.TRAJECTORY_CSV}")
         print(f"[video_processor] Saved detections -> {config.DETECTIONS_CSV}")
