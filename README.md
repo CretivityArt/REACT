@@ -550,8 +550,6 @@ The original proposal identifies the following technical and research references
 
 This project is currently under development.
 
-Add the project's final open-source license here once the team has agreed on the licensing model.
-
 ---
 
 <div align="center">
